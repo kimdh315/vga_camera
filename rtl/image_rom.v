@@ -2,7 +2,6 @@
 
 module image_rom (
     input             clk,
-    input             rst,
     input      [16:0] addr,
     output reg [15:0] data
 );
@@ -14,11 +13,7 @@ module image_rom (
         $readmemh("Lenna_320x240.mem", mem);
     end
 
-    always @(posedge clk or posedge rst) begin
-        if (rst) begin
-            data <= 0;
-        end else begin
+    always @(posedge clk) begin
             data <= mem[addr];
-        end
     end
 endmodule

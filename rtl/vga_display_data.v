@@ -10,9 +10,6 @@ module vga_display_data #(
     input                       mode,
     input  [$clog2(H_SIZE)-1:0] x_pixel,
     input  [$clog2(V_SIZE)-1:0] y_pixel,
-    // input  [               3:0] input_red,
-    // input  [               3:0] input_green,
-    // input  [               3:0] input_blue,
     output [               3:0] vgaRed,
     output [               3:0] vgaGreen,
     output [               3:0] vgaBlue
@@ -22,33 +19,78 @@ module vga_display_data #(
 
     // ROM Reader
     wire [15:0] px_data;
-    wire [16:0] vga_addr;
+    wire [16:0] vga_addr_next;
 
     vga_rom_reader U_VGA_ROM_READER (
         .mode    (mode),
         .x_pixel (x_pixel),
         .y_pixel (y_pixel),
         .px_data (px_data),
-        .vga_addr(vga_addr),
+        .vga_addr(vga_addr_next),
         .vga_data(vga_data)
+    );
+
+    // Pipeline register to get high Fmax
+    wire [16:0] vga_addr;
+    // to meet pixel and data timing
+    wire [9:0] x_pixel_rt, y_pixel_rt;
+    wire de_rt;
+
+    stage_register U_STAGE_REG (
+        .clk          (clk),
+        .rst          (rst),
+        .vga_addr_next(vga_addr_next),
+        .x_pixel      (x_pixel),
+        .y_pixel      (y_pixel),
+        .de           (de),
+        .vga_addr     (vga_addr),
+        .x_pixel_rt   (x_pixel_rt),
+        .y_pixel_rt   (y_pixel_rt),
+        .de_rt        (de_rt)
     );
 
     image_rom U_IMAGE_ROM (
         .clk (clk),
-        .rst (rst),
         .addr(vga_addr),
         .data(px_data)
     );
 
     // Display Enable signal
     wire qvga_de;
-    assign qvga_de = (x_pixel < 320) & (y_pixel < 240);
-    assign disparea = mode ? de : qvga_de;
+    assign qvga_de  = (x_pixel_rt < 320) & (y_pixel_rt < 240);
+    assign disparea = mode ? de_rt : qvga_de;
 
     // RGB output data
     assign vgaRed   = {4{disparea}} & vga_data[11:8];
     assign vgaGreen = {4{disparea}} & vga_data[7:4];
     assign vgaBlue  = {4{disparea}} & vga_data[3:0];
+endmodule
+
+module stage_register (
+    input             clk,
+    input             rst,
+    input      [16:0] vga_addr_next,
+    input      [ 9:0] x_pixel,
+    input      [ 9:0] y_pixel,
+    input             de,
+    output reg [16:0] vga_addr,
+    output reg [ 9:0] x_pixel_rt,
+    output reg [ 9:0] y_pixel_rt,
+    output reg        de_rt
+);
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            vga_addr   <= 0;
+            x_pixel_rt <= 0;
+            y_pixel_rt <= 0;
+            de_rt      <= 0;
+        end else begin
+            vga_addr   <= vga_addr_next;
+            x_pixel_rt <= x_pixel;
+            y_pixel_rt <= y_pixel;
+            de_rt      <= de;
+        end
+    end
 endmodule
 
 module vga_rom_reader (
