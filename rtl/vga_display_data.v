@@ -4,15 +4,15 @@ module vga_display_data #(
     parameter H_SIZE = 800,
     parameter V_SIZE = 525
 ) (
-    input                       clk,
-    input                       rst,
-    input                       de,
-    input                       mode,
-    input  [$clog2(H_SIZE)-1:0] x_pixel,
-    input  [$clog2(V_SIZE)-1:0] y_pixel,
-    output [               3:0] vgaRed,
-    output [               3:0] vgaGreen,
-    output [               3:0] vgaBlue
+    input                           clk,
+    input                           rst,
+    input                           de,
+    input                           mode,
+    input      [$clog2(H_SIZE)-1:0] x_pixel,
+    input      [$clog2(V_SIZE)-1:0] y_pixel,
+    output reg [               3:0] vgaRed,
+    output reg [               3:0] vgaGreen,
+    output reg [               3:0] vgaBlue
 );
     wire [11:0] vga_data;
     wire disparea;
@@ -61,9 +61,23 @@ module vga_display_data #(
     assign disparea = mode ? de_rt : qvga_de;
 
     // RGB output data
-    assign vgaRed   = {4{disparea}} & vga_data[11:8];
-    assign vgaGreen = {4{disparea}} & vga_data[7:4];
-    assign vgaBlue  = {4{disparea}} & vga_data[3:0];
+    wire [3:0] vgaRed_next, vgaGreen_next, vgaBlue_next;
+    assign vgaRed_next   = {4{disparea}} & vga_data[11:8];
+    assign vgaGreen_next = {4{disparea}} & vga_data[7:4];
+    assign vgaBlue_next  = {4{disparea}} & vga_data[3:0];
+
+    // Output Register
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            vgaRed   <= 0;
+            vgaGreen <= 0;
+            vgaBlue  <= 0;
+        end else begin
+            vgaRed   <= vgaRed_next;
+            vgaGreen <= vgaGreen_next;
+            vgaBlue  <= vgaBlue_next;
+        end
+    end
 endmodule
 
 module stage_register (
