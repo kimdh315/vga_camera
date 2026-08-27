@@ -7,9 +7,7 @@ module vga #(
     input        clk,
     input        rst,
     input        mode,
-    // input  [3:0] input_red,
-    // input  [3:0] input_green,
-    // input  [3:0] input_blue,
+    input sw_gray,
     output [3:0] vgaRed,
     output [3:0] vgaBlue,
     output [3:0] vgaGreen,
@@ -38,7 +36,8 @@ module vga #(
     );
 
     // VGA Display data
-    wire [3:0] vgaRed_next, vgaGreen_next, vgaBlue_next;
+    wire [3:0] vgaRed_raw, vgaGreen_raw, vgaBlue_raw;
+    wire [3:0] vgaRed_raw_next, vgaGreen_raw_next, vgaBlue_raw_next;
 
     vga_display_data #(
         .H_SIZE(H_SIZE),
@@ -50,37 +49,67 @@ module vga #(
         .x_pixel (x_pixel),
         .y_pixel (y_pixel),
         .mode    (mode),
-        // .input_red  (input_red),
-        // .input_green(input_green),
-        // .input_blue (input_blue),
-        .vgaRed  (vgaRed_next),
-        .vgaBlue (vgaBlue_next),
-        .vgaGreen(vgaGreen_next)
+        .vgaRed  (vgaRed_raw_next),
+        .vgaGreen(vgaGreen_raw_next),
+        .vgaBlue (vgaBlue_raw_next)
     );
 
+    // Pipeline stage to avoid setup time violation
+    wire Hsync_rt1, Vsync_rt1;
+    vga_stagereg U_VGA_PIPELINE (
+        .clk          (clk),
+        .rst          (rst),
+        .vgaRed_next  (vgaRed_raw_next),
+        .vgaGreen_next(vgaGreen_raw_next),
+        .vgaBlue_next (vgaBlue_raw_next),
+        .Hsync_next   (Hsync_next),
+        .Vsync_next   (Vsync_next),
+        .vgaRed       (vgaRed_raw),
+        .vgaGreen     (vgaGreen_raw),
+        .vgaBlue      (vgaBlue_raw),
+        .Hsync        (Hsync_rt1),
+        .Vsync        (Vsync_rt1)
+    );
+
+    // Gray filter
+    wire [3:0] vgaRed_gray, vgaGreen_gray, vgaBlue_gray;
+    gray_filter U_GRAY_FILTER (
+        .input_red   (vgaRed_raw),
+        .input_green (vgaGreen_raw),
+        .input_blue  (vgaBlue_raw),
+        .output_red  (vgaRed_gray),
+        .output_green(vgaGreen_gray),
+        .output_blue (vgaBlue_gray)
+    );
+
+    // Mux to Select raw data or filtered data
+    wire [3:0] vgaRed_next, vgaGreen_next, vgaBlue_next;
+    assign vgaRed_next   = sw_gray ? vgaRed_gray : vgaRed_raw;
+    assign vgaGreen_next = sw_gray ? vgaGreen_gray : vgaGreen_raw;
+    assign vgaBlue_next  = sw_gray ? vgaBlue_gray : vgaBlue_raw;
+
     // Reg to match timing with BRAM
-    reg Hsync_rt, Vsync_rt;
+    reg Hsync_rt2, Vsync_rt2;
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            Hsync_rt <= 1;
-            Vsync_rt <= 1;
-        end
-        else begin
-            Hsync_rt <= Hsync_next;
-            Vsync_rt <= Vsync_next;
+            Hsync_rt2 <= 1;
+            Vsync_rt2 <= 1;
+        end else begin
+            Hsync_rt2 <= Hsync_rt1;
+            Vsync_rt2 <= Vsync_rt1;
         end
     end
 
 
     // VGA output register - to avoid glitch
-    vga_outreg U_VGA_OUTREG (
+    vga_stagereg U_VGA_OUTREG (
         .clk          (clk),
         .rst          (rst),
         .vgaRed_next  (vgaRed_next),
         .vgaGreen_next(vgaGreen_next),
         .vgaBlue_next (vgaBlue_next),
-        .Hsync_next   (Hsync_rt),
-        .Vsync_next   (Vsync_rt),
+        .Hsync_next   (Hsync_rt2),
+        .Vsync_next   (Vsync_rt2),
         .vgaRed       (vgaRed),
         .vgaGreen     (vgaGreen),
         .vgaBlue      (vgaBlue),
@@ -90,7 +119,7 @@ module vga #(
 
 endmodule
 
-module vga_outreg (
+module vga_stagereg (
     input            clk,
     input            rst,
     input      [3:0] vgaRed_next,
