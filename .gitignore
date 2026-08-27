@@ -1,0 +1,43 @@
+# ---- Simulation build / output ----
+sim/build/
+sim/work/
+sim/*.log
+sim/*.wlf
+sim/*.vcd
+sim/*.fst
+transcript
+
+# ---- UVM / SystemVerilog sim artifacts ----
+*.vstf
+*.dbg
+*.daidir/
+csrc/
+simv*
+ucli.key
+vc_hdrs.h
+
+# ---- Coverage output ----
+coverage/
+*.ucdb
+*.acdb
+cov_work/
+urgReport/
+
+# ---- QuestaSim / ModelSim ----
+work/
+modelsim.ini
+*.mti
+
+# ---- Verilator ----
+obj_dir/
+
+# ---- Editor / OS ----
+.vscode/
+*.swp
+.DS_Store
+
+# Vivado project (generated)
+vivado_prj/
+*.jou
+*.log
+.Xil/
