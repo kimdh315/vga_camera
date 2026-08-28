@@ -14,6 +14,6 @@ module image_rom (
     end
 
     always @(posedge clk) begin
-            data <= mem[addr];
+        data <= mem[addr];
     end
 endmodule

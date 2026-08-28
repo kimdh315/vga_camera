@@ -6,22 +6,22 @@ module vga_display_data #(
 ) (
     input                           clk,
     input                           rst,
-    input                           de,
     input                           mode,
+    input                           de,
     input      [$clog2(H_SIZE)-1:0] x_pixel,
     input      [$clog2(V_SIZE)-1:0] y_pixel,
+    input      [              15:0] px_data,
+    output     [              16:0] vga_addr,
     output reg [               3:0] vgaRed,
     output reg [               3:0] vgaGreen,
     output reg [               3:0] vgaBlue
 );
     wire [11:0] vga_data;
-    wire disparea;
 
     // ROM Reader
-    wire [15:0] px_data;
     wire [16:0] vga_addr_next;
 
-    vga_rom_reader U_VGA_ROM_READER (
+    vga_frame_buf_reader U_VGA_FRAME_BUF_READER (
         .mode    (mode),
         .x_pixel (x_pixel),
         .y_pixel (y_pixel),
@@ -31,7 +31,6 @@ module vga_display_data #(
     );
 
     // Pipeline register to get high Fmax
-    wire [16:0] vga_addr;
     // to meet pixel and data timing
     wire [9:0] x_pixel_rt, y_pixel_rt;
     wire de_rt;
@@ -49,22 +48,12 @@ module vga_display_data #(
         .de_rt        (de_rt)
     );
 
-    image_rom U_IMAGE_ROM (
-        .clk (clk),
-        .addr(vga_addr),
-        .data(px_data)
-    );
-
-    // Display Enable signal
-    wire qvga_de;
-    assign qvga_de  = (x_pixel_rt < 320) & (y_pixel_rt < 240);
-    assign disparea = mode ? de_rt : qvga_de;
 
     // RGB output data
     wire [3:0] vgaRed_next, vgaGreen_next, vgaBlue_next;
-    assign vgaRed_next   = {4{disparea}} & vga_data[11:8];
-    assign vgaGreen_next = {4{disparea}} & vga_data[7:4];
-    assign vgaBlue_next  = {4{disparea}} & vga_data[3:0];
+    assign vgaRed_next   = {4{de_rt}} & vga_data[11:8];
+    assign vgaGreen_next = {4{de_rt}} & vga_data[7:4];
+    assign vgaBlue_next  = {4{de_rt}} & vga_data[3:0];
 
     // Output Register
     always @(posedge clk or posedge rst) begin
@@ -107,7 +96,7 @@ module stage_register (
     end
 endmodule
 
-module vga_rom_reader (
+module vga_frame_buf_reader (
     input         mode,
     input  [ 9:0] x_pixel,
     input  [ 9:0] y_pixel,

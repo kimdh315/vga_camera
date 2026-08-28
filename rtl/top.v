@@ -1,0 +1,123 @@
+`timescale 1ns / 1ps
+
+module top (
+    input        clk,
+    input        rst,
+    input        mode,
+    // Camera
+    output       xclk,
+    input        pclk,
+    input        cam_href,
+    input        cam_vsync,
+    input  [7:0] pdata,
+    // VGA
+    output       Hsync,
+    output       Vsync,
+    output [3:0] vgaRed,
+    output [3:0] vgaGreen,
+    output [3:0] vgaBlue
+);
+    pclk_gen U_CAM_CLK_GEN (
+        .clk (clk),
+        .rst (rst),
+        .pclk(xclk)
+    );
+
+    // Frame Buffer
+    // ===============================
+    wire [15:0] wdata;
+    wire [16:0] waddr;
+    wire we;
+    ov7670_mem_controller U_OV7670_MEM_CONTROLLER (
+        .pclk (pclk),
+        .rst  (rst),
+        .href (cam_href),
+        .vsync(cam_vsync),
+        .pdata(pdata),
+        .we   (we),
+        .waddr(waddr),
+        .wdata(wdata)
+    );
+
+    // Frame Buffer
+    // ===============================
+    wire [15:0] rdata;
+    wire [16:0] raddr;
+    frame_buffer U_FRAME_BUFFER (
+        .wclk (pclk),
+        .we   (we),
+        .waddr(waddr),
+        .wdata(wdata),
+        .rclk (clk),
+        .raddr(raddr),
+        .rdata(rdata)
+    );
+
+    // VGA Controller
+    // ===============================
+    wire [9:0] x_pixel, y_pixel;
+    wire Hsync_next, Vsync_next;
+    vga_controller U_VGA_CONTROLLER (
+        .clk    (clk),
+        .rst    (rst),
+        .pclk   (xclk),
+        .Hsync  (Hsync_next),
+        .Vsync  (Vsync_next),
+        .x_pixel(x_pixel),
+        .y_pixel(y_pixel),
+        .de     (de)
+    );
+
+    // Frame Buffer
+    // ===============================
+    wire [3:0] vgaRed_next, vgaGreen_next, vgaBlue_next;
+    vga_display_data U_VGA_DISPLAY_DATA (
+        .clk     (clk),
+        .rst     (rst),
+        .mode    (mode),
+        .de      (de),
+        .x_pixel (x_pixel),
+        .y_pixel (y_pixel),
+        .px_data (rdata),
+        .vga_addr(raddr),
+        .vgaRed  (vgaRed_next),
+        .vgaGreen(vgaGreen_next),
+        .vgaBlue (vgaBlue_next)
+    );
+
+    // Synchronizer for Sync Signal
+    // ===============================
+    localparam LATENCY = 2;
+    reg [LATENCY-1:0] Hsync_reg, Vsync_reg;
+    wire Hsync_rt, Vsync_rt;
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            Hsync_reg <= 0;
+            Vsync_reg <= 0;
+        end else begin
+            Hsync_reg <= {Hsync_next, Hsync_reg[LATENCY-1:1]};
+            Vsync_reg <= {Vsync_next, Vsync_reg[LATENCY-1:1]};
+        end
+    end
+
+    assign Hsync_rt = Hsync_reg[0];
+    assign Vsync_rt = Vsync_reg[0];
+
+    // VGA Output register
+    // ===============================
+    vga_stagereg U_VGA_OUTREG (
+        .clk          (clk),
+        .rst          (rst),
+        .vgaRed_next  (vgaRed_next),
+        .vgaGreen_next(vgaGreen_next),
+        .vgaBlue_next (vgaBlue_next),
+        .Hsync_next   (Hsync_rt),
+        .Vsync_next   (Vsync_rt),
+        .vgaRed       (vgaRed),
+        .vgaGreen     (vgaGreen),
+        .vgaBlue      (vgaBlue),
+        .Hsync        (Hsync),
+        .Vsync        (Vsync)
+    );
+
+endmodule

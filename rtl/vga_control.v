@@ -6,6 +6,7 @@ module vga_controller #(
 ) (
     input                         clk,
     input                         rst,
+    input                         pclk,
     output                        Hsync,
     output                        Vsync,
     output [$clog2(H_SIZE)-1 : 0] x_pixel,
@@ -13,17 +14,8 @@ module vga_controller #(
     output                        de
 );
     // Wire
-    wire pclk;
-
     wire [$clog2(H_SIZE)-1 : 0] h_count;
     wire [$clog2(V_SIZE)-1 : 0] v_count;
-
-    // PCLK generator
-    pclk_gen U_PCLK_GEN (
-        .clk (clk),
-        .rst (rst),
-        .pclk(pclk)
-    );
 
     // Pixel Counter
     pixel_counter #(
