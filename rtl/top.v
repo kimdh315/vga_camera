@@ -5,6 +5,8 @@ module top (
     input        rst,
     input        mode,
     input        sw_gray,
+    input        sw_bin,
+    input  [3:0] sw_bin_thr,
     // Camera
     output       xclk,
     input        pclk,
@@ -100,9 +102,24 @@ module top (
         .output_blue (vgaBlue_gstage)
     );
 
+    // Binary filter
+    wire [3:0] vgaRed_binstage, vgaGreen_binstage, vgaBlue_binstage;
+    binary_filter U_BIN_FILTER (
+        .clk         (clk),
+        .rst         (rst),
+        .sw_bin      (sw_bin),
+        .input_red   (vgaRed_gstage),
+        .input_green (vgaGreen_gstage),
+        .input_blue  (vgaBlue_gstage),
+        .bin_thr     (sw_bin_thr),
+        .output_red  (vgaRed_binstage),
+        .output_green(vgaGreen_binstage),
+        .output_blue (vgaBlue_binstage)
+    );
+
     // Synchronizer for Sync Signal
     // ===============================
-    localparam LATENCY = 2;
+    localparam LATENCY = 3;
     reg [LATENCY-1:0] Hsync_reg, Vsync_reg;
     wire Hsync_rt, Vsync_rt;
     always @(posedge clk or posedge rst) begin
@@ -121,9 +138,9 @@ module top (
     // VGA Output register
     // ===============================
     wire [3:0] vgaRed_next, vgaGreen_next, vgaBlue_next;
-    assign vgaRed_next   = vgaRed_gstage;
-    assign vgaGreen_next = vgaGreen_gstage;
-    assign vgaBlue_next  = vgaBlue_gstage;
+    assign vgaRed_next   = vgaRed_binstage;
+    assign vgaGreen_next = vgaGreen_binstage;
+    assign vgaBlue_next  = vgaBlue_binstage;
     vga_stagereg U_VGA_OUTREG (
         .clk          (clk),
         .rst          (rst),
