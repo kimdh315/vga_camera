@@ -4,6 +4,7 @@ module top (
     input        clk,
     input        rst,
     input        mode,
+    input        sw_gray,
     // Camera
     output       xclk,
     input        pclk,
@@ -70,7 +71,7 @@ module top (
 
     // Frame Buffer
     // ===============================
-    wire [3:0] vgaRed_next, vgaGreen_next, vgaBlue_next;
+    wire [3:0] vgaRed_raw, vgaGreen_raw, vgaBlue_raw;
     vga_display_data U_VGA_DISPLAY_DATA (
         .clk     (clk),
         .rst     (rst),
@@ -80,42 +81,49 @@ module top (
         .y_pixel (y_pixel),
         .px_data (rdata),
         .vga_addr(raddr),
-        .vgaRed  (vgaRed_next),
-        .vgaGreen(vgaGreen_next),
-        .vgaBlue (vgaBlue_next)
+        .vgaRed  (vgaRed_raw),
+        .vgaGreen(vgaGreen_raw),
+        .vgaBlue (vgaBlue_raw)
+    );
+
+    // Gray filter
+    wire [3:0] vgaRed_gstage, vgaGreen_gstage, vgaBlue_gstage;
+    gray_filter U_GRAY_FILTER (
+        .clk         (clk),
+        .rst         (rst),
+        .sw_gray     (sw_gray),
+        .input_red   (vgaRed_raw),
+        .input_green (vgaGreen_raw),
+        .input_blue  (vgaBlue_raw),
+        .output_red  (vgaRed_gstage),
+        .output_green(vgaGreen_gstage),
+        .output_blue (vgaBlue_gstage)
     );
 
     // Synchronizer for Sync Signal
     // ===============================
-    // localparam LATENCY = 2;
-    // reg [LATENCY-1:0] Hsync_reg, Vsync_reg;
-    reg Hsync_rt, Vsync_rt;
-    // always @(posedge clk or posedge rst) begin
-    //     if (rst) begin
-    //         Hsync_reg <= 0;
-    //         Vsync_reg <= 0;
-    //     end else begin
-    //         Hsync_reg <= {Hsync_next, Hsync_reg[LATENCY-1:1]};
-    //         Vsync_reg <= {Vsync_next, Vsync_reg[LATENCY-1:1]};
-    //     end
-    // end
-
+    localparam LATENCY = 2;
+    reg [LATENCY-1:0] Hsync_reg, Vsync_reg;
+    wire Hsync_rt, Vsync_rt;
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            Hsync_rt <= 1;
-            Vsync_rt <= 1;
+            Hsync_reg <= 0;
+            Vsync_reg <= 0;
         end else begin
-            Hsync_rt <= Hsync_next;
-            Vsync_rt <= Vsync_next;
+            Hsync_reg <= {Hsync_next, Hsync_reg[LATENCY-1:1]};
+            Vsync_reg <= {Vsync_next, Vsync_reg[LATENCY-1:1]};
         end
     end
 
-
-    // assign Hsync_rt = Hsync_reg[0];
-    // assign Vsync_rt = Vsync_reg[0];
+    assign Hsync_rt = Hsync_reg[0];
+    assign Vsync_rt = Vsync_reg[0];
 
     // VGA Output register
     // ===============================
+    wire [3:0] vgaRed_next, vgaGreen_next, vgaBlue_next;
+    assign vgaRed_next   = vgaRed_gstage;
+    assign vgaGreen_next = vgaGreen_gstage;
+    assign vgaBlue_next  = vgaBlue_gstage;
     vga_stagereg U_VGA_OUTREG (
         .clk          (clk),
         .rst          (rst),
