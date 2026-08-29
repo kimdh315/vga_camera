@@ -42,9 +42,11 @@ module ov7670_mem_controller #(
         we_next        = 1'b0;  // for 1 pulse
         byte_flag_next = byte_flag;
 
+        if (we_reg) begin
+            waddr_next = waddr_cnt + 1;
+        end
         if (href) begin
             byte_flag_next = ~byte_flag;
-            waddr_next = waddr_cnt + 1;
 
             if (byte_flag) begin
                 wdata_next[7:0] = pdata;

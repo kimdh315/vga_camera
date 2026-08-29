@@ -46,6 +46,7 @@ vivado_prj/
 stm32/.metadata/
 stm32/RemoteSystemsTempFiles/
 stm32/.externalToolBuilders/
+stm32/**/.settings/
 
 # ---- STM32CubeIDE build output ----
 stm32/**/Debug/
@@ -53,8 +54,15 @@ stm32/**/Release/
 stm32/**/*.o
 stm32/**/*.d
 stm32/**/*.su
+stm32/**/*.cyclo
 stm32/**/*.elf
 stm32/**/*.bin
 stm32/**/*.hex
 stm32/**/*.map
 stm32/**/*.list
+
+# ---- CubeMX-generated vendor libraries (regenerate from the .ioc) ----
+stm32/**/Drivers/
+
+# ---- Personal debug/launch config ----
+stm32/**/*.launch

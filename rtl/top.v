@@ -87,21 +87,32 @@ module top (
 
     // Synchronizer for Sync Signal
     // ===============================
-    localparam LATENCY = 2;
-    reg [LATENCY-1:0] Hsync_reg, Vsync_reg;
-    wire Hsync_rt, Vsync_rt;
+    // localparam LATENCY = 2;
+    // reg [LATENCY-1:0] Hsync_reg, Vsync_reg;
+    reg Hsync_rt, Vsync_rt;
+    // always @(posedge clk or posedge rst) begin
+    //     if (rst) begin
+    //         Hsync_reg <= 0;
+    //         Vsync_reg <= 0;
+    //     end else begin
+    //         Hsync_reg <= {Hsync_next, Hsync_reg[LATENCY-1:1]};
+    //         Vsync_reg <= {Vsync_next, Vsync_reg[LATENCY-1:1]};
+    //     end
+    // end
+
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            Hsync_reg <= 0;
-            Vsync_reg <= 0;
+            Hsync_rt <= 1;
+            Vsync_rt <= 1;
         end else begin
-            Hsync_reg <= {Hsync_next, Hsync_reg[LATENCY-1:1]};
-            Vsync_reg <= {Vsync_next, Vsync_reg[LATENCY-1:1]};
+            Hsync_rt <= Hsync_next;
+            Vsync_rt <= Vsync_next;
         end
     end
 
-    assign Hsync_rt = Hsync_reg[0];
-    assign Vsync_rt = Vsync_reg[0];
+
+    // assign Hsync_rt = Hsync_reg[0];
+    // assign Vsync_rt = Vsync_reg[0];
 
     // VGA Output register
     // ===============================

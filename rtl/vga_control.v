@@ -95,12 +95,26 @@ module pixel_counter #(
     reg [$clog2(H_SIZE)-1 : 0] h_count_next;
     reg [$clog2(V_SIZE)-1 : 0] v_count_next;
 
+    // pclk rising edge detector
+    reg pclk_dly;
+    wire pclk_rise;
+    assign pclk_rise = pclk & ~pclk_dly;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            pclk_dly <= 0;
+        end else begin
+            pclk_dly <= pclk;
+        end
+    end
+
+    // always @(posedge clk or posedge rst) begin
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             h_count <= 0;
             v_count <= 0;
         end else begin
-            if (pclk) begin
+            if (pclk_rise) begin
                 h_count <= h_count_next;
                 v_count <= v_count_next;
             end
@@ -129,7 +143,7 @@ module pclk_gen (
 );
     // PCLK frequency = 25MHz
     reg pclk_next;
-    reg [1:0] p_cnt, p_cnt_next;
+    reg p_cnt, p_cnt_next;
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -142,11 +156,11 @@ module pclk_gen (
     end
 
     always @(*) begin
-        pclk_next  = 0;
+        pclk_next  = pclk;
         p_cnt_next = p_cnt + 1;
-        if (p_cnt == 2'd3) begin
+        if (p_cnt == 1'b1) begin
             p_cnt_next = 0;
-            pclk_next  = 1;
+            pclk_next  = ~pclk;
         end
     end
 endmodule
