@@ -8,7 +8,7 @@ module i2c_transaction (
     input      [ 6:0] addr,
     input             is_read,    // i2c_addr register [7]
     input      [ 1:0] dataNum,
-    input      [31:0] tdr,
+    input      [15:0] tdr,   // SCCB write: {sub_addr[7:0], data[7:0]}, sent MSB-first
     output reg [31:0] rdr,
     output reg        tr_done,
     output            tr_busy,
@@ -47,7 +47,7 @@ module i2c_transaction (
     reg [ 6:0] addr_r;
     reg        is_read_r;
     reg [ 1:0] dataNum_r;
-    reg [31:0] tdr_r;
+    reg [15:0] tdr_r;
 
     // ---------------------------------
     // [1] Transaction Logic - FSM
@@ -67,7 +67,7 @@ module i2c_transaction (
             addr_r    <= 7'd0;
             is_read_r <= 1'b0;
             dataNum_r <= 2'd0;
-            tdr_r     <= 32'd0;
+            tdr_r     <= 16'd0;
         end else begin
             cmd_start <= 1'b0;
             cmd_write <= 1'b0;
@@ -115,12 +115,13 @@ module i2c_transaction (
 
                 CMD_WRITE: begin
                     cmd_write <= 1'b1;  // 1-cycle 펄스
-                    tx_data   <= tdr_r[byte_cnt*8+:8];
+                    // SCCB fixed 2-byte write, MSB(sub_addr) first then LSB(data)
+                    tx_data   <= (byte_cnt == 8'd0) ? tdr_r[15:8] : tdr_r[7:0];
                     state     <= WAIT_WRITE;
                 end
                 WAIT_WRITE: begin
                     if (done) begin
-                        if (byte_cnt == dataNum_r) begin
+                        if (byte_cnt == 8'd1) begin
                             state <= CMD_STOP;
                         end else begin
                             byte_cnt <= byte_cnt + 1;

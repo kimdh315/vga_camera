@@ -7,19 +7,24 @@ module sccb (
     inout  sda
 );
     // ov7670 Slave address
-    parameter OV7670_ADDR = 7'h42;
+    parameter OV7670_ADDR = 7'h21;
+
+    // clk = 100MHz -> 1ms inter-transaction delay (register write settle time)
+    localparam DELAY_CYCLES = 100_000;
 
     // State
-    parameter [1:0] IDLE = 0;
-    parameter [1:0] OPERATION = 1;
-    parameter [1:0] WAIT = 2;
-    parameter [1:0] DONE = 3;
+    parameter [2:0] IDLE = 0;
+    parameter [2:0] OPERATION = 1;
+    parameter [2:0] WAIT = 2;
+    parameter [2:0] DELAY = 3;
+    parameter [2:0] DONE = 4;
 
-    reg [1:0] c_state, n_state;
+    reg [2:0] c_state, n_state;
 
     // wire to connect FSM & Transaction module
     reg start_reg, start_next;
     reg [6:0] setup_addr, setup_addr_next;
+    reg [16:0] delay_cnt, delay_cnt_next;
     wire start;
     wire tr_done, tr_busy;
     wire [15:0] setup_data;
@@ -32,18 +37,21 @@ module sccb (
             c_state    <= IDLE;
             setup_addr <= 0;
             start_reg  <= 1'b0;
+            delay_cnt  <= 0;
         end else begin
             c_state    <= n_state;
             setup_addr <= setup_addr_next;
             start_reg  <= start_next;
+            delay_cnt  <= delay_cnt_next;
         end
     end
 
     // Next State Logic
     always @(*) begin
-        n_state = c_state;
+        n_state         = c_state;
         setup_addr_next = setup_addr;
-        start_next = 1'b0;  // for 1 pulse
+        start_next      = 1'b0;  // for 1 pulse
+        delay_cnt_next  = delay_cnt;
 
         case (c_state)
             IDLE: begin
@@ -61,9 +69,19 @@ module sccb (
                     if (setup_addr == 71) begin
                         n_state = DONE;
                     end else begin
-                        n_state = OPERATION;
-                        start_next = 1'b1;
+                        n_state        = DELAY;
+                        delay_cnt_next = 0;
                     end
+                end
+            end
+
+            // slave 쪽 register write 정착 시간을 위해 트랜잭션 사이마다 삽입하는 지연
+            DELAY: begin
+                if (delay_cnt == DELAY_CYCLES - 1) begin
+                    n_state    = OPERATION;
+                    start_next = 1'b1;
+                end else begin
+                    delay_cnt_next = delay_cnt + 1;
                 end
             end
 
@@ -92,10 +110,10 @@ module sccb (
         .addr     (OV7670_ADDR),
         .is_read  (1'b0),                 // set to write only
         .dataNum  (2'b1),
-        .tdr      ({16'b0, setup_data}),
-        .rdr      (rdr),
+        .tdr      (setup_data),
+        .rdr      (),
         .tr_done  (tr_done),
-        .tr_busy  (tr_busy),
+        .tr_busy  (),
         .cmd_start(cmd_start),
         .cmd_stop (cmd_stop),
         .cmd_read (cmd_read),

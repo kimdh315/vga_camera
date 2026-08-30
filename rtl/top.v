@@ -18,7 +18,10 @@ module top (
     output       Vsync,
     output [3:0] vgaRed,
     output [3:0] vgaGreen,
-    output [3:0] vgaBlue
+    output [3:0] vgaBlue,
+    // I2C port
+    output       scl,
+    inout        sda
 );
     pclk_gen U_CAM_CLK_GEN (
         .clk (clk),
@@ -26,7 +29,16 @@ module top (
         .pclk(xclk)
     );
 
-    // Frame Buffer
+    // SCCB
+    // ===============================
+    sccb U_SCCB (
+        .clk(clk),
+        .rst(rst),
+        .scl(scl),
+        .sda(sda)
+    );
+
+    // OV7670 Memory Controller
     // ===============================
     wire [15:0] wdata;
     wire [16:0] waddr;
