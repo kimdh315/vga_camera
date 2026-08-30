@@ -66,7 +66,7 @@ module sccb (
 
             WAIT: begin
                 if (tr_done) begin
-                    if (setup_addr == 71) begin
+                    if (setup_addr == 75) begin
                         n_state = DONE;
                     end else begin
                         n_state        = DELAY;

@@ -4,7 +4,7 @@ module ov7670_setup_rom (
     input  [ 6:0] addr,
     output [15:0] data
 );
-    reg [15:0] rom[0:71];
+    reg [15:0] rom[0:75];
 
     // Write setup sequence data to rom
     initial begin
