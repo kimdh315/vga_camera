@@ -19,12 +19,10 @@ A secondary goal was cross-checking the camera register configuration: an STM32-
 | Camera | OV7670, SCCB (I2C-compatible) config + 8-bit parallel data |
 | Capture resolution | QVGA, 320×240, RGB565 |
 | Display | VGA 640×480 @ 60Hz (25MHz pixel clock) |
-| Display modes | 1:1 QVGA passthrough, or 2× nearest-neighbor upscale to fill the screen |
 | Output color depth | 4-bit per channel (RGB565 capture truncated to RGB444 out) |
-| Image filters ㅍ| Grayscale (BT.601-weighted luma), binary threshold (runtime threshold via switches) |
-| SCCB master | Custom bit-banged I2C master, 100kHz SCL, command-driven (start/write/read/stop) |
-| Camera init sequence | 76-entry register ROM, one-shot FSM with inter-transaction settle delay |
-| Frame buffer | Dual-port block RAM, write @ camera `pclk`, read @ system `clk` |
+| Image filters | Grayscale (BT.601-weighted luma), binary threshold (runtime threshold via switches) |
+| SCCB master | Custom bit-banged I2C master, 100kHz SCL |
+| Frame buffer | Dual-port BRAM, write at camera `pclk`, read at system `clk` |
 | Target board | Basys3 (Xilinx Artix-7, `xc7a35tcpg236-1`) |
 | System clock | 100MHz |
 
@@ -32,37 +30,10 @@ A secondary goal was cross-checking the camera register configuration: an STM32-
 
 ## Architecture
 
-```
-                     ┌─────────────────────────────────────────────────┐
-  Boot-time          │                     sccb.v                      │
-  configuration       │  ov7670_setup_rom → i2c_transaction → i2c_master │
-                     └──────────────────────┬────────────────────────┘
-                                             │ SCL / SDA
-                                             ▼
-                                        [ OV7670 ]
-                                             │ pclk, href, vsync, pdata[7:0]
-                                             ▼
-  ┌───────────────────────┐   we/waddr/wdata   ┌────────────────────┐
-  │ ov7670_mem_controller  │ ─────────────────▶ │    frame_buffer     │
-  │  (pclk domain)         │                    │  (dual-port BRAM,   │
-  └───────────────────────┘                    │   pclk write /      │
-                                                │   clk read)         │
-                                                └──────────┬──────────┘
-                                                            │ rdata (clk domain)
-                                                            ▼
-                              vga_control.v          vga_display_data.v
-                          (pixel_counter,       ──▶  (frame buffer read,
-                           vga_decoder,               1x/2x upscale mux,
-                           pclk_gen 25MHz)             RGB565→RGB444)
-                                                            │
-                                                            ▼
-                                              gray_filter → binary_filter
-                                                            │
-                                                            ▼
-                                                   vga_stagereg → VGA pins
-```
+![Block Diagram](docs/block_diagram.png)  
+*Figure 1. Block Diagram*  
 
-`top.v` wires these blocks together for the board build; `vga.v` + `image_rom.v` (loading `Lenna_320x240.mem`) is a standalone static-image variant of the display path used to verify VGA timing before the camera was integrated (see `tb/tb_vga.sv`).
+- 2 CLK Domain is exist. (PCLK & System CLK)
 
 ---
 
@@ -70,33 +41,19 @@ A secondary goal was cross-checking the camera register configuration: an STM32-
 
 ### 1. SCCB / I2C Camera Configuration
 
-- **`ov7670_setup_rom.v`** holds a 76-entry `{sub_addr[7:0], data[7:0]}` table (`ov7670_setup.mem`), driven sequentially by `sccb.v`'s FSM (`IDLE → OPERATION → WAIT → DELAY → DONE`).
-- **`i2c_transaction.v`** sequences one SCCB write per ROM entry (START → slave address → 2 data bytes → STOP). The write data register (`tdr`) is 16-bit and sent **MSB-first** (`sub_addr` then `data`) to match the SCCB byte order — this differs from a generic I2C register interface, which would send the LSB byte first.
-- **`i2c_master.v`** is a bit-banged I2C master: a quarter-tick generator divides the 100MHz system clock by 250 to produce a 100kHz SCL, and a `START/WAIT_CMD/DATA/DATA_ACK/STOP` FSM shifts bits out MSB-first and samples the ACK/NACK bit.
-- **Bring-up issue — NAK after reset:** the second SCCB transaction (right after the `COM7=0x80` soft-reset write) was NAK'd on real hardware. Root cause: the OV7670 needs a settling time after a soft reset before it will ACK further SCCB traffic — the FSM was issuing the next transaction with no delay. Fixed by adding a counter-based `DELAY` state (1ms @ 100MHz) between every transaction in `sccb.v`.
-- **Bring-up issue — washed-out image:** after the NAK was fixed, the captured image displayed but looked hazy/desaturated. Diffing the FPGA's register ROM against the STM32 reference driver's `defaults[]` table surfaced four registers the ROM never touched — `COM8` (AGC/AWB/AEC enable), `AWBCTR0`, `COM4`, `HAECC1` — which were added to `ov7670_setup.mem` (now 76 entries, `ov7670_setup_rom.v` sized accordingly).
+![SCCB FSM](docs/sccb_block_diagram.png)  
+*Figure 2. SCCB Block diagram & FSM*  
 
-### 2. Camera Capture & Clock-Domain Crossing
+### 2. VGA
 
-- **`ov7670_mem_controller.v`** runs entirely in the camera's `pclk` domain: it packs two 8-bit `pdata` bytes (gated by `href`) into one 16-bit RGB565 word per pixel, and resets its write address on `vsync`.
-- **`frame_buffer.v`** is a dual-port RAM — write side clocked by `pclk`, read side by the system `clk` — that is the sole crossing point between the camera and VGA clock domains.
-- An earlier bring-up bug produced green noise in the captured image, traced to the CDC path occasionally skipping an `xclk`/`pclk` edge; resolved before the filter stages were added.
 
-### 3. VGA Timing & Display
 
-- **`vga_control.v`**: `pclk_gen` divides the 100MHz system clock to a 25MHz pixel clock; `pixel_counter` + `vga_decoder` generate the 800×525 (640×480 visible) VGA timing and `x_pixel`/`y_pixel`/`de`.
-- **`vga_display_data.v`**: maps `(x_pixel, y_pixel)` to a frame-buffer address — either the raw QVGA address or a 2× nearest-neighbor upscaled address (`vga_upscaler`) selected by the `mode` switch — and truncates the 16-bit RGB565 sample to 12-bit RGB444. A pipeline stage (`stage_register`) keeps the address, pixel coordinates, and `de` aligned for timing closure.
+### 3. Image Filters
 
-### 4. Image Filters
+- gray_filter: fixed-point BT.601 luma (`77·R + 150·G + 29·B`, scaled), switched in/out per channel.
+- binary_filter: per-channel threshold to full-on/full-off, with a 4-bit runtime threshold driven from board switches.
 
-- **`gray_filter.v`**: fixed-point BT.601 luma (`77·R + 150·G + 29·B`, scaled), switched in/out per channel.
-- **`binary_filter.v`**: per-channel threshold to full-on/full-off, with a 4-bit runtime threshold driven from board switches.
-
-Both filters are pipelined (registered outputs) purely to meet timing, not for functional reasons.
-
-### 5. STM32 Reference Driver
-
-`stm32/ov7670_setup` is a full HAL-based OV7670 driver (`OV7670.c/.h`, `OV7670_REG.h`) running on an STM32F411RE Nucleo board. It isn't part of the FPGA data path — it exists to independently exercise the OV7670's SCCB register set (AGC/AEC/AWB toggles, brightness, saturation, effects, resolution presets) and served as the "known-good" reference when debugging the FPGA's hand-written setup ROM.
+Both filters are pipelined (registered outputs) purely to meet timing.
 
 ---
 
