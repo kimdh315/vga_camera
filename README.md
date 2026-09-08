@@ -34,6 +34,7 @@ A secondary goal was cross-checking the camera register configuration: an STM32-
 *Figure 1. Block Diagram*  
 
 - 2 CLK Domain is exist. (PCLK & System CLK)
+- Dual-Port BRAM is used as the frame buffer to support asynchronous access across different clock domains
 
 ---
 
@@ -43,6 +44,10 @@ A secondary goal was cross-checking the camera register configuration: an STM32-
 
 ![SCCB FSM](docs/sccb_block_diagram.png)  
 *Figure 2. SCCB Block diagram & FSM*  
+
+- Designed an SCCB control architecture for OV7670 camera initialization
+- Stored initialization register data in ROM and managed the configuration sequence using an FSM
+- Implemented SCCB communication by having the Transaction module control the I2C Master
 
 ### 2. VGA
 
@@ -81,6 +86,7 @@ Both filters are pipelined (registered outputs) purely to meet timing.
   <em>Figure 1. (a) Raw Image from camera. (b) Gray filtered image. (c) Binary filtered raw image. (d) Binary filtered gray image.</em>
 </p>
 
+
 | Metric | Value |
 |--------|-------|
 | LUT | 322 |
@@ -92,6 +98,8 @@ Both filters are pipelined (registered outputs) purely to meet timing.
 | Fmax | 139.99MHz |
 | WNS (setup) | 2.857ns |
 | WHS (hold) | 0.109ns |
+
+*Table 1. Resouces*  
 
 ---
 
